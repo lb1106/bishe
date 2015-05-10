@@ -1,12 +1,31 @@
 #include "common.h"  
-  
+#include <stdlib.h>
+#include <sys/time.h>
+#include <linux/tcp.h>
+int tim_subtract(struct timeval *result, struct timeval *x, struct timeval *y)
+{
+	int nsec;
+	if ( x->tv_sec > y->tv_sec )
+		return   -1;
+    if ((x->tv_sec==y->tv_sec) && (x->tv_usec>y->tv_usec))
+		return   -1;
+	result->tv_sec = ( y->tv_sec-x->tv_sec );
+	result->tv_usec = ( y->tv_usec-x->tv_usec );
+	if (result->tv_usec<0)
+	{
+		result->tv_sec--;
+		result->tv_usec+=1000000;}
+		return   0;
+}
 int main(int argc, char *argv[])  
 {  
     //Input the file name  
-    char filename[FILE_NAME_MAX_SIZE];  
+    char filename[FILE_NAME_MAX_SIZE]="/home/liubin/TCPFile/";  
+    char temp_filename[FILE_NAME_MAX_SIZE];
     bzero(filename,FILE_NAME_MAX_SIZE);  
     printf("Please input the file name you wana to send:");  
-    scanf("%s",filename);  
+    scanf("%s",temp_filename);  
+    strcat(filename,temp_filename);
     getchar();  
   
     //Create socket  
@@ -32,6 +51,21 @@ int main(int argc, char *argv[])
         exit(1);  
     }  
     
+    
+    
+    int snd_buf_size=1024*1024;
+    /*if(setsockopt(sockfd,SOL_SOCKET,SO_SNDBUF,&snd_buf_size,sizeof(int))<0)
+		perror("setsockopt error:");
+		*/
+    socklen_t opt1=4;
+    if(getsockopt(sockfd,SOL_SOCKET,SO_SNDBUF,&snd_buf_size,&opt1)<0)
+		perror("getsockopt error:");
+	int flag=1;
+	if(setsockopt(sockfd,IPPROTO_TCP,TCP_NODELAY,&flag,sizeof(int))<0)
+		perror("disable nagle error:");
+    printf("send buf size is %d\n",snd_buf_size);
+    
+    
     //listen  
     if(listen(sockfd,LISTENQ)<0)  
     {  
@@ -50,13 +84,17 @@ int main(int argc, char *argv[])
             perror("connect");  
             exit(1);  
         }  
-      
+		struct timeval start,stop,diff;
+		gettimeofday(&start,0);
+        
         //send file imformation  
         char buff[BUFFSIZE];  
         int count;  
         bzero(buff,BUFFSIZE);  
-        strncpy(buff,filename,strlen(filename)>FILE_NAME_MAX_SIZE?FILE_NAME_MAX_SIZE:strlen(filename));  
-        count=send(connfd,buff,BUFFSIZE,0);  
+        buff[0]=strlen(temp_filename);
+        strncpy(buff+1,temp_filename,strlen(temp_filename)>FILE_NAME_MAX_SIZE?FILE_NAME_MAX_SIZE:strlen(temp_filename));  
+        count=send(connfd,buff,strlen(temp_filename)+1,0);  
+        printf("count is :%d %d\n",count,strlen(filename)+1);
         if(count<0)  
         {  
             perror("Send file information");  
@@ -85,6 +123,9 @@ int main(int argc, char *argv[])
             }  
             fclose(fd);  
             printf("Transfer file finished !\n");  
+            gettimeofday(&stop,0);
+            tim_subtract(&diff,&start,&stop);
+            printf("total time: %d(ms)\n",diff.tv_usec);
         }  
         close(connfd);  
     }  
